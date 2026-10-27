@@ -1,3 +1,4 @@
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,6 +32,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void initState() {
     super.initState();
+    WakelockPlus.enable(); // keep the screen on while reading
     appState.setLastPage(_page);
     _startDwell();
     _sub = _player.playerStateStream.listen((s) {
@@ -43,6 +45,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   @override
   void dispose() {
+    WakelockPlus.disable(); // let the screen sleep normally again
     _dwell?.cancel();
     _sub?.cancel();
     _player.stop();
