@@ -21,6 +21,7 @@ class QuranApp extends StatelessWidget {
           ThemeData theme(Brightness b) => ThemeData(
                 useMaterial3: true,
                 fontFamily: 'Tajawal',
+                fontFamilyFallback: const ['Amiri', 'AmiriQuran'],
                 colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1B6B4F), brightness: b),
                 scaffoldBackgroundColor:
                     b == Brightness.dark ? const Color(0xFF101412) : const Color(0xFFFAF7F0),

@@ -36,7 +36,7 @@ class MushafPageView extends StatelessWidget {
         nat.add(tp.width);
         maxNat = math.max(maxNat, tp.width);
       }
-      final fs = math.min(math.min(100 * w / maxNat, lineH * .62), 42.0);
+      final fs = math.min(math.min(100 * w / maxNat, lineH * .55), 42.0);
       return _Fit(fs, nat);
     });
   }
@@ -86,10 +86,10 @@ class MushafPageView extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(QuranRepository.surahs[r.surah - 1].name,
-              style: TextStyle(fontFamily: 'Amiri', fontWeight: FontWeight.w700, fontSize: fs * 1.05, color: cs.onSurface)),
+              style: TextStyle(fontFamily: 'Amiri', fontWeight: FontWeight.w700, fontSize: fs * 1.05, height: 1.3, color: cs.onSurface)),
         );
       case 2:
-        return Center(child: Text(_basmala, style: TextStyle(fontFamily: 'AmiriQuran', fontSize: fs, color: cs.onSurface)));
+        return Center(child: Text(_basmala, style: TextStyle(fontFamily: 'AmiriQuran', fontSize: fs, height: 1.6, color: cs.onSurface)));
       case 3:
         return const SizedBox.shrink();
     }
@@ -109,6 +109,7 @@ class MushafPageView extends StatelessWidget {
                   style: TextStyle(
                     fontFamily: 'AmiriQuran',
                     fontSize: wd.end ? fs * .9 : fs,
+                    height: 1.6,
                     color: wd.end ? _endColor(cs, wd.g) : cs.onSurface,
                   )),
             ),
@@ -118,7 +119,6 @@ class MushafPageView extends StatelessWidget {
   }
 
   Color _endColor(ColorScheme cs, int g) {
-    final i = appState.bookmarkIndex(g);
-    return i == null ? kGold : tagColors[int.parse(appState.bookmarks[i].split('|')[1])];
+    return appState.bookmarkColorOf(g) ?? kGold;
   }
 }
