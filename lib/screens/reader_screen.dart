@@ -4,6 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import '../core/config.dart';
 import '../data/app_state.dart';
+import '../data/audio_store.dart';
+import '../data/reciters.dart';
+import '../widgets/index_sheet.dart';
 import '../data/quran_repository.dart';
 import '../main.dart';
 import '../widgets/mushaf_page_view.dart';
@@ -61,13 +64,55 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _pc.animateToPage(pg - 1, duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
     }
     try {
-      await _player.setUrl(AppConfig.audioUrl(appState.reciter, g));
+      await _load(Reciters.byId(appState.reciter, appState.reciterName), g);
       unawaited(_player.play());
     } catch (_) {
       if (mounted) {
         setState(() => playingG = null);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر تشغيل الصوت، تحقق من الاتصال')));
       }
+    }
+  }
+
+  /// Plays the downloaded file when present, otherwise streams (trying fallback bitrates).
+  Future<void> _load(Reciter r, int g) async {
+    final st = AudioStore.I;
+    if (st.ready && st.has(r.id, g)) {
+      final f = st.fileFor(r.id, g);
+      if (await f.exists()) {
+        await _player.setFilePath(f.path);
+        return;
+      }
+    }
+    Object? last;
+    for (final u in r.urls(g).take(3)) {
+      try {
+        await _player.setUrl(u);
+        return;
+      } catch (e) {
+        last = e;
+      }
+    }
+    throw last ?? StateError('no audio url');
+  }
+
+  void _openIndex() => showIndexSheet(context, (page) => _pc.jumpToPage(page - 1));
+
+  Future<void> _downloadPage() async {
+    final r = Reciters.byId(appState.reciter, appState.reciterName);
+    final page = _page;
+    final gs = <int>{};
+    for (final row in QuranRepository.pages[page - 1].rows) {
+      for (final w in row.words) {
+        gs.add(w.g);
+      }
+    }
+    _toast('جارٍ تحميل صوت الصفحة…');
+    final fail = await AudioStore.I.download('pg$page|${r.id}', r, gs.toList()..sort());
+    if (fail < 0) {
+      _toast('التخزين غير متاح على هذا الجهاز');
+    } else {
+      _toast(fail == 0 ? 'تم تحميل صوت الصفحة' : 'تعذّر تحميل ${arabicNum(fail)} آية، تحقق من الاتصال');
     }
   }
 
@@ -232,7 +277,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
             title: Text('صفحة ${arabicNum(_page)}', style: const TextStyle(fontSize: 17)),
             centerTitle: true,
             actions: [
+              IconButton(icon: const Icon(Icons.menu), tooltip: 'الفهرس', onPressed: _openIndex),
               IconButton(icon: const Icon(Icons.pin_outlined), tooltip: 'انتقال', onPressed: _jumpDialog),
+              ListenableBuilder(
+                listenable: AudioStore.I,
+                builder: (_, __) => AudioStore.I.isBusy('pg$_page|${appState.reciter}')
+                    ? const Padding(
+                        padding: EdgeInsets.all(14),
+                        child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                    : IconButton(icon: const Icon(Icons.cloud_download_outlined), tooltip: 'تحميل صوت الصفحة', onPressed: _downloadPage),
+              ),
               IconButton(
                 icon: Icon(playingG == null ? Icons.headphones : Icons.stop_circle_outlined),
                 tooltip: 'استماع',

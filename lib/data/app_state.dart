@@ -16,6 +16,7 @@ class AppState extends ChangeNotifier {
   late SharedPreferences _p;
   bool dark = false, readVertical = false;
   String reciter = 'ar.alafasy';
+  String reciterName = 'مشاري راشد العفاسي';
   int lastPage = 0, streak = 0, khatmahDays = 30, todayCount = 0;
   String lastDay = '', readPages = '0' * 604;
   List<String> bookmarks = []; // "g|colorIndex|name|date"
@@ -32,6 +33,7 @@ class AppState extends ChangeNotifier {
     dark = _p.getBool('dark') ?? false;
     readVertical = _p.getBool('vertical') ?? false;
     reciter = _p.getString('reciter') ?? 'ar.alafasy';
+    reciterName = _p.getString('reciterName') ?? 'مشاري راشد العفاسي';
     lastPage = _p.getInt('lastPage') ?? 0;
     streak = _p.getInt('streak') ?? 0;
     lastDay = _p.getString('lastDay') ?? '';
@@ -58,7 +60,13 @@ class AppState extends ChangeNotifier {
   void refresh() => notifyListeners();
   void setDark(bool v) { dark = v; _p.setBool('dark', v); notifyListeners(); }
   void setVertical(bool v) { readVertical = v; _p.setBool('vertical', v); notifyListeners(); }
-  void setReciter(String v) { reciter = v; _p.setString('reciter', v); notifyListeners(); }
+  void setReciter(String id, String name) {
+    reciter = id;
+    reciterName = name;
+    _p.setString('reciter', id);
+    _p.setString('reciterName', name);
+    notifyListeners();
+  }
   void setKhatmahDays(int v) { khatmahDays = v; _p.setInt('kdays', v); notifyListeners(); }
   void setLastPage(int p) { lastPage = p; _p.setInt('lastPage', p); }
 

@@ -21,6 +21,11 @@ class MWord {
   const MWord(this.t, this.g, this.end);
 }
 
+class Rub {
+  final int n, g, page; // quarter number 1..240, first verse, page
+  const Rub(this.n, this.g, this.page);
+}
+
 /// kind: 0 = text line, 1 = surah header, 2 = basmala, 3 = blank line
 class MRow {
   final int kind, surah;
@@ -40,6 +45,7 @@ class QuranRepository {
   static late List<String> tafsir;
   static late List<MPage> pages;
   static final Map<int, int> ayahPage = {};
+  static List<Rub> rubs = [];
   static const total = 6236;
   static const pageCount = 604;
 
@@ -64,6 +70,12 @@ class QuranRepository {
       for (final r in p.rows) {
         for (final w in r.words) { ayahPage.putIfAbsent(w.g, () => p.p); }
       }
+    }
+    try {
+      final ix = jsonDecode(await rootBundle.loadString('assets/quran/index.json'));
+      rubs = [for (final x in (ix['rubs'] as List)) Rub(x[0] as int, x[1] as int, x[2] as int)];
+    } catch (_) {
+      rubs = [];
     }
     // Runtime integrity guard: refuse to run with incomplete data
     final count = surahs.fold<int>(0, (s, e) => s + e.ayahs.length);

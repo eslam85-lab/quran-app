@@ -86,7 +86,7 @@ class MushafPageView extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(QuranRepository.surahs[r.surah - 1].name,
-              style: TextStyle(fontFamily: 'Amiri', fontWeight: FontWeight.w700, fontSize: fs * 1.05, height: 1.3, color: cs.onSurface)),
+              style: TextStyle(fontFamily: 'Amiri', fontWeight: FontWeight.w700, fontSize: math.min(fs * 1.05, lineH * .40), height: 1.3, color: cs.onSurface)),
         );
       case 2:
         return Center(child: Text(_basmala, style: TextStyle(fontFamily: 'AmiriQuran', fontSize: fs, height: 1.6, color: cs.onSurface)));

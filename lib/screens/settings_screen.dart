@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/config.dart';
 import '../main.dart';
+import '../data/reciters.dart';
 import '../widgets/logo_mark.dart';
+import 'downloads_screen.dart';
+import 'reciters_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -23,12 +26,19 @@ class SettingsScreen extends StatelessWidget {
           SwitchListTile(title: const Text('تمرير الصفحات عمودياً'), subtitle: const Text('بدلاً من التقليب الأفقي'),
               value: appState.readVertical, onChanged: appState.setVertical),
           ListTile(
+            leading: const Icon(Icons.record_voice_over_outlined),
             title: const Text('القارئ'),
-            trailing: DropdownButton<String>(
-              value: appState.reciter,
-              items: [for (final e in AppConfig.reciters.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
-              onChanged: (v) => appState.setReciter(v!),
-            ),
+            subtitle: Text(appState.reciterName),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RecitersScreen())),
+          ),
+          ListTile(
+            leading: const Icon(Icons.cloud_download_outlined),
+            title: const Text('التحميل الصوتي'),
+            subtitle: const Text('للاستماع دون إنترنت'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => DownloadsScreen(reciter: Reciters.byId(appState.reciter, appState.reciterName)))),
           ),
           const Divider(height: 40),
           // ---------- About ----------
