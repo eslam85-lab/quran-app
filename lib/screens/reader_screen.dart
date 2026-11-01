@@ -1,11 +1,11 @@
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/config.dart';
 import '../data/app_state.dart';
 import '../data/audio_controller.dart';
 import '../data/audio_store.dart';
+import '../data/khatma_state.dart';
 import '../data/reader_session.dart';
 import '../data/reciters.dart';
 import '../widgets/index_sheet.dart';
@@ -28,7 +28,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
   late final PageController _pc = PageController(initialPage: widget.page - 1);
   late int _page = widget.page;
   int? playingG;
-  Timer? _dwell;
   final ac = AudioController.I;
   int? _lastG;
 
@@ -37,7 +36,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     super.initState();
     WakelockPlus.enable(); // keep the screen on while reading
     widget.session.visit(_page);
-    _startDwell();
     ac.addListener(_onAudio);
   }
 
@@ -46,7 +44,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     WakelockPlus.disable();
     ac.removeListener(_onAudio);
     ac.stop();
-    _dwell?.cancel();
     _pc.dispose();
     WidgetsBinding.instance.addPostFrameCallback((_) => widget.session.exit());
     super.dispose();
@@ -73,11 +70,47 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  void _startDwell() {
-    _dwell?.cancel();
-    final p = _page;
-    _dwell = Timer(const Duration(seconds: 4), () => widget.session.read(p));
-  }
+  /// Manual khatma control: a page counts as read ONLY when the user taps this button.
+  Widget _markBar() => ListenableBuilder(
+        listenable: Listenable.merge([khatmaState, ac]),
+        builder: (ctx, _) {
+          final cs = Theme.of(ctx).colorScheme;
+          final read = widget.session.isRead(_page);
+          return Material(
+            color: cs.surface,
+            elevation: 6,
+            child: SafeArea(
+              top: false,
+              bottom: !ac.repeating, // the memorize bar below already covers the system inset
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                child: read
+                    ? FilledButton.tonalIcon(
+                        onPressed: () {
+                          widget.session.unmarkRead(_page);
+                          _toast('أُلغيت علامة القراءة لهذه الصفحة');
+                        },
+                        icon: const Icon(Icons.check_circle),
+                        label: Text('تمت قراءة صفحة ${arabicNum(_page)} · اضغط للتراجع'),
+                        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(46)),
+                      )
+                    : FilledButton.icon(
+                        onPressed: () {
+                          widget.session.markRead(_page);
+                          HapticFeedback.mediumImpact();
+                          if (_pc.hasClients && _page < QuranRepository.pageCount) {
+                            _pc.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+                          }
+                        },
+                        icon: const Icon(Icons.done_all),
+                        label: Text('تم القراءة · صفحة ${arabicNum(_page)}'),
+                        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(46)),
+                      ),
+              ),
+            ),
+          );
+        },
+      );
 
   void _openIndex() => showIndexSheet(context, (page) => _pc.jumpToPage(page - 1));
 
@@ -291,7 +324,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 listenable: ac,
                 builder: (ctx, child) {
                   final mq = MediaQuery.of(ctx);
-                  if (!ac.repeating) return child!;
+                  if (!ac.repeating && !widget.session.supportsMarking) return child!;
                   return MediaQuery(
                     data: mq.copyWith(
                       padding: mq.padding.copyWith(bottom: 0),
@@ -310,7 +343,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     onPageChanged: (i) {
                       setState(() => _page = i + 1);
                       widget.session.visit(_page);
-                      _startDwell();
                     },
                     itemBuilder: (_, i) => MushafPageView(
                       page: QuranRepository.pages[i],
@@ -321,6 +353,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 ),
               ),
             ),
+            if (widget.session.supportsMarking) _markBar(),
             const MemorizeBar(),
           ]),
         ),

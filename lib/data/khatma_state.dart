@@ -152,6 +152,20 @@ class KhatmaState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Undo a "mark as read" (the user tapped it by mistake).
+  void unmarkPage(int page) {
+    final i = page - 1;
+    if (readPages[i] != '0') {
+      readPages = readPages.substring(0, i) + '0' + readPages.substring(i + 1);
+      _p.setString('kh_rp', readPages);
+    }
+    if (_todaySet.remove(page)) {
+      todayCount = _todaySet.length;
+      _p.setStringList('kh_tp', _todaySet.map((e) => '$e').toList());
+    }
+    notifyListeners();
+  }
+
   void resetKhatma() {
     readPages = '0' * 604;
     lastPage = 0;

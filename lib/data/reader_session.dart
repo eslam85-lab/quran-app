@@ -7,7 +7,10 @@ abstract class ReaderSession {
   const ReaderSession();
   String get titlePrefix; // shown in the app bar so the user always knows which mode is open
   void visit(int page); // user is looking at [page] (remember position)
-  void read(int page); // user stayed long enough: count [page] as read
+  bool get supportsMarking => false; // true => the reader shows the manual "تم القراءة" button
+  bool isRead(int page) => false;
+  void markRead(int page) {} // ONLY called when the user taps "تم القراءة" (never automatic)
+  void unmarkRead(int page) {}
   void exit(); // reader closed
 }
 
@@ -18,8 +21,6 @@ class SurahSession extends ReaderSession {
   String get titlePrefix => '';
   @override
   void visit(int page) => appState.setLastPage(page);
-  @override
-  void read(int page) {} // browsing does not touch the khatma
   @override
   void exit() => appState.refresh();
 }
@@ -32,7 +33,13 @@ class KhatmaSession extends ReaderSession {
   @override
   void visit(int page) => khatmaState.visit(page);
   @override
-  void read(int page) => khatmaState.markPageRead(page);
+  bool get supportsMarking => true;
+  @override
+  bool isRead(int page) => khatmaState.isRead(page);
+  @override
+  void markRead(int page) => khatmaState.markPageRead(page);
+  @override
+  void unmarkRead(int page) => khatmaState.unmarkPage(page);
   @override
   void exit() => khatmaState.refresh();
 }

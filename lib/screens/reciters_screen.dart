@@ -5,7 +5,8 @@ import '../data/reciters.dart';
 import '../main.dart';
 import 'downloads_screen.dart';
 
-/// Reciters grouped by sheikh, one row per edition (مرتّل / مجوّد / تراويح).
+/// Reciters grouped by sheikh, one row per edition (مرتّل / مجوّد / معلّم / تراويح).
+/// Editions whose audio server cannot be reached are hidden automatically.
 class RecitersScreen extends StatefulWidget {
   const RecitersScreen({super.key});
   @override
@@ -14,20 +15,29 @@ class RecitersScreen extends StatefulWidget {
 
 class _RecitersScreenState extends State<RecitersScreen> {
   String _q = '';
-  bool _loading = false, _failed = false;
+  int _done = 0, _total = 0;
+  bool _checking = false;
   String? _busy;
 
   @override
   void initState() {
     super.initState();
-    if (!Reciters.remoteLoaded) _load();
+    _verify();
   }
 
-  Future<void> _load() async {
-    setState(() { _loading = true; _failed = false; });
-    final ok = await Reciters.fetchRemote();
-    if (!mounted) return;
-    setState(() { _loading = false; _failed = !ok; });
+  Future<void> _verify({bool force = false}) async {
+    setState(() {
+      _checking = true;
+      _total = Reciters.all.length;
+      _done = Reciters.checked.length;
+    });
+    await Reciters.verifyAll(
+      force: force,
+      onProgress: (d, t) {
+        if (mounted) setState(() { _done = d; _total = t; });
+      },
+    );
+    if (mounted) setState(() => _checking = false);
   }
 
   void _toast(String m) {
@@ -35,14 +45,9 @@ class _RecitersScreenState extends State<RecitersScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m), duration: const Duration(seconds: 2)));
   }
 
-  /// Checks that the edition really has audio before selecting it (so a wrong folder never sticks).
   Future<void> _pick(Reciter r) async {
-    if (r.soon) {
-      _toast('المصدر الصوتي لهذه النسخة غير متوفر بعد');
-      return;
-    }
     setState(() => _busy = r.id);
-    final ok = await AudioStore.I.probe(r);
+    final ok = Reciters.checked[r.id] == true || await AudioStore.I.probe(r);
     Reciters.checked[r.id] = ok;
     if (!mounted) return;
     setState(() => _busy = null);
@@ -55,24 +60,30 @@ class _RecitersScreenState extends State<RecitersScreen> {
   }
 
   String _source(Reciter r) {
-    if (r.soon) return 'قريباً · لا يوجد مصدر صوتي آية بآية';
     if (AudioStore.I.anyFor(r.id)) return 'يوجد صوت محمّل';
-    if (Reciters.checked[r.id] == false) return 'غير متاح حالياً';
-    return r.isEvery ? 'everyayah.com' : 'islamic.network';
+    if (Reciters.checked[r.id] == null) return 'جارٍ التحقق…';
+    return 'متاح · بثّ وتحميل';
   }
 
   @override
   Widget build(BuildContext context) {
     final nq = normalizeAr(_q);
     final groups = <String, List<Reciter>>{};
-    for (final r in Reciters.all) {
+    for (final r in Reciters.usable) {
       if (nq.isNotEmpty && !normalizeAr('${r.groupName} ${r.name}').contains(nq)) continue;
       groups.putIfAbsent(r.groupName, () => []).add(r);
     }
+    final hidden = Reciters.all.length - Reciters.usable.length;
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        appBar: AppBar(title: const Text('القرّاء'), centerTitle: true),
+        appBar: AppBar(
+          title: const Text('القرّاء'),
+          centerTitle: true,
+          actions: [
+            IconButton(icon: const Icon(Icons.refresh), tooltip: 'إعادة التحقق من المصادر', onPressed: _checking ? null : () => _verify(force: true)),
+          ],
+        ),
         body: Column(children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -85,13 +96,16 @@ class _RecitersScreenState extends State<RecitersScreen> {
               ),
             ),
           ),
-          if (_loading) const LinearProgressIndicator(),
-          if (_failed)
-            ListTile(
-              dense: true,
-              leading: const Icon(Icons.wifi_off),
-              title: const Text('تعذّر جلب قائمة القرّاء الإضافية'),
-              trailing: TextButton(onPressed: _load, child: const Text('إعادة')),
+          if (_checking) ...[
+            LinearProgressIndicator(value: _total == 0 ? null : _done / _total),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text('جارٍ التحقق من مصادر الصوت… $_done / $_total', style: const TextStyle(fontSize: 12)),
+            ),
+          ] else if (hidden > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text('أُخفيت $hidden نسخة لأن مصدر صوتها غير متاح الآن', style: const TextStyle(fontSize: 12)),
             ),
           Expanded(
             child: ListenableBuilder(
@@ -113,22 +127,19 @@ class _RecitersScreenState extends State<RecitersScreen> {
   }
 
   Widget _tile(BuildContext ctx, Reciter r) {
-    final sel = r.id == appState.reciter;
+    final sel = Reciters.byId(appState.reciter).id == r.id;
     final cs = Theme.of(ctx).colorScheme;
     return ListTile(
-      enabled: !r.soon,
       leading: Icon(sel ? Icons.radio_button_checked : Icons.radio_button_unchecked, color: sel ? cs.primary : null),
       title: Text(r.style == ReciterStyle.other ? r.name : r.style.label),
       subtitle: Text(_source(r)),
       trailing: _busy == r.id
           ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-          : r.soon
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.cloud_download_outlined),
-                  tooltip: 'التحميل الصوتي',
-                  onPressed: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => DownloadsScreen(reciter: r))),
-                ),
+          : IconButton(
+              icon: const Icon(Icons.cloud_download_outlined),
+              tooltip: 'التحميل الصوتي',
+              onPressed: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => DownloadsScreen(reciter: r))),
+            ),
       onTap: () => _pick(r),
     );
   }

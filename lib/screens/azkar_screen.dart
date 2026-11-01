@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/azkar_data.dart';
 import '../data/quran_repository.dart' show arabicNum;
 import '../widgets/logo_mark.dart' show kGold;
@@ -15,6 +16,48 @@ class _AzkarScreenState extends State<AzkarScreen> {
   late final Map<AzkarCategory, List<int>> _left = {
     for (final c in AzkarCategory.values) c: [for (final z in azkarFor(c)) z.count],
   };
+
+  // reading size, remembered between launches
+  double _fs = 24;
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((p) {
+      final v = p.getDouble('az_fs');
+      if (v != null && mounted) setState(() => _fs = v.clamp(18, 36));
+    });
+  }
+
+  void _sizeSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: StatefulBuilder(
+          builder: (ctx, set) => Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text('حجم الخط', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              Text('سُبْحَانَ اللَّهِ وَبِحَمْدِهِ', style: TextStyle(fontFamily: 'Amiri', fontSize: _fs, height: 1.9)),
+              Slider(
+                value: _fs,
+                min: 18,
+                max: 36,
+                divisions: 9,
+                onChanged: (v) {
+                  set(() => _fs = v);
+                  setState(() {});
+                },
+                onChangeEnd: (v) => SharedPreferences.getInstance().then((p) => p.setDouble('az_fs', v)),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
 
   void _tap(AzkarCategory c, int i) {
     if (_left[c]![i] <= 0) return;
@@ -38,6 +81,7 @@ class _AzkarScreenState extends State<AzkarScreen> {
               title: const Text('الأذكار'),
               centerTitle: true,
               actions: [
+                IconButton(icon: const Icon(Icons.text_fields), tooltip: 'حجم الخط', onPressed: _sizeSheet),
                 AnimatedBuilder(
                   animation: tc,
                   builder: (_, __) => IconButton(
@@ -48,6 +92,8 @@ class _AzkarScreenState extends State<AzkarScreen> {
                 ),
               ],
               bottom: TabBar(
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
                 tabs: [for (final c in AzkarCategory.values) Tab(text: c.title)],
               ),
             ),
@@ -116,12 +162,14 @@ class _AzkarScreenState extends State<AzkarScreen> {
               Text(
                 z.text,
                 textAlign: TextAlign.center,
+                textScaler: TextScaler.noScaling, // size is controlled by the in-app slider
                 style: TextStyle(
-                  fontFamily: 'Amiri',
-                  fontWeight: FontWeight.w700,
-                  fontSize: 23,
-                  height: 1.95,
-                  color: cs.onSurface,
+                  fontFamily: 'Amiri', // classic Naskh: clear tashkeel, restful for long reading
+                  fontWeight: FontWeight.w400,
+                  fontSize: _fs,
+                  height: 2.1, // room for the marks above/below the line
+                  letterSpacing: 0,
+                  color: cs.onSurface.withOpacity(.94),
                 ),
               ),
               if (z.note != null) ...[

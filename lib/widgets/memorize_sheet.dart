@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../data/audio_controller.dart';
 import '../data/quran_repository.dart';
 
@@ -26,7 +27,8 @@ class _MemorizeSheetState extends State<_MemorizeSheet> {
   late int from = widget.fromAyah;
   late int to = widget.fromAyah;
   int times = 5; // 0 = endless
-  int gap = 0;
+  PauseMode pauseMode = PauseMode.none;
+  int gap = 0; // seconds, used when pauseMode == fixed
 
   Surah get s => QuranRepository.surahs[surah - 1];
   int get max => s.ayahs.length;
@@ -45,13 +47,22 @@ class _MemorizeSheetState extends State<_MemorizeSheet> {
     to = from;
   }
 
+  void _setFrom(int v) => setState(() {
+        from = v.clamp(1, max);
+        if (to < from) to = from;
+      });
+
+  void _setTo(int v) => setState(() => to = v.clamp(from, max));
+
   void _start() {
+    FocusManager.instance.primaryFocus?.unfocus(); // commits any half-typed number first
     final plan = RepeatPlan(
       surah: surah,
       from: s.ayahs[from - 1].g,
       to: s.ayahs[to - 1].g,
       times: times,
-      gapSeconds: gap,
+      pauseMode: pauseMode,
+      gapSeconds: pauseMode == PauseMode.fixed ? gap : 0,
     );
     AudioController.I.startRepeat(plan);
     Navigator.pop(context);
@@ -60,8 +71,9 @@ class _MemorizeSheetState extends State<_MemorizeSheet> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final mq = MediaQuery.of(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).padding.bottom),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + mq.viewInsets.bottom + mq.padding.bottom),
       child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const Text('تكرار الآيات للحفظ', textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -70,20 +82,21 @@ class _MemorizeSheetState extends State<_MemorizeSheet> {
             value: surah,
             decoration: const InputDecoration(labelText: 'السورة', border: OutlineInputBorder()),
             items: [
-              for (final x in QuranRepository.surahs)
-                DropdownMenuItem(value: x.n, child: Text('${arabicNum(x.n)}. ${x.name}')),
+              for (final x in QuranRepository.surahs) DropdownMenuItem(value: x.n, child: Text('${arabicNum(x.n)}. ${x.name}')),
             ],
             onChanged: (v) => setState(() => _setSurah(v!)),
           ),
           const SizedBox(height: 14),
-          Row(children: [
-            Expanded(child: _Stepper(label: 'من الآية', value: from, min: 1, max: max, onChanged: (v) => setState(() {
-              from = v;
-              if (to < from) to = from;
-            }))),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: NumberStepper(label: 'من الآية', value: from, min: 1, max: max, onChanged: _setFrom)),
             const SizedBox(width: 12),
-            Expanded(child: _Stepper(label: 'إلى الآية', value: to, min: from, max: max, onChanged: (v) => setState(() => to = v))),
+            Expanded(child: NumberStepper(label: 'إلى الآية', value: to, min: from, max: max, onChanged: _setTo)),
           ]),
+          Padding(
+            padding: const EdgeInsets.only(top: 4, right: 4),
+            child: Text('اضغط على الرقم لتكتبه مباشرة (١ – ${arabicNum(max)})',
+                style: TextStyle(fontSize: 11.5, color: cs.onSurface.withOpacity(.6))),
+          ),
           const SizedBox(height: 14),
           const Text('عدد مرات التكرار'),
           const SizedBox(height: 6),
@@ -93,7 +106,7 @@ class _MemorizeSheetState extends State<_MemorizeSheet> {
             ChoiceChip(label: const Text('∞ بلا حد'), selected: times == 0, onSelected: (_) => setState(() => times = 0)),
           ]),
           const SizedBox(height: 8),
-          _Stepper(
+          NumberStepper(
             label: 'أو حدّد العدد',
             value: times == 0 ? 1 : times,
             min: 1,
@@ -101,12 +114,31 @@ class _MemorizeSheetState extends State<_MemorizeSheet> {
             onChanged: (v) => setState(() => times = v),
           ),
           const SizedBox(height: 14),
-          const Text('وقفة بعد كل آية (لتردّدها بنفسك)'),
+          const Text('وقفات الترديد'),
           const SizedBox(height: 6),
           Wrap(spacing: 8, children: [
             for (final g in [0, 1, 2, 3, 5])
-              ChoiceChip(label: Text(g == 0 ? 'بلا وقفة' : '${arabicNum(g)} ث'), selected: gap == g, onSelected: (_) => setState(() => gap = g)),
+              ChoiceChip(
+                label: Text(g == 0 ? 'بلا وقفة' : '${arabicNum(g)} ث'),
+                selected: g == 0 ? pauseMode == PauseMode.none : (pauseMode == PauseMode.fixed && gap == g),
+                onSelected: (_) => setState(() {
+                  gap = g;
+                  pauseMode = g == 0 ? PauseMode.none : PauseMode.fixed;
+                }),
+              ),
           ]),
+          const SizedBox(height: 4),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            value: pauseMode == PauseMode.reciterDuration,
+            onChanged: (v) => setState(() => pauseMode = v ? PauseMode.reciterDuration : PauseMode.none),
+            title: const Text('وقفة بحسب مدة قراءة الشيخ للآية تماماً', style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: const Text('بعد كل آية يصمت التطبيق بقدر مدتها نفسها، لتردّدها أنت بنفس الإيقاع'),
+          ),
+          if (pauseMode == PauseMode.none)
+            Text('بلا وقفة: تنتقل الآيات والتكرارات متصلة بلا انقطاع ولا تأخير.',
+                style: TextStyle(fontSize: 11.5, color: cs.onSurface.withOpacity(.6))),
           const SizedBox(height: 18),
           FilledButton.icon(
             onPressed: _start,
@@ -122,21 +154,119 @@ class _MemorizeSheetState extends State<_MemorizeSheet> {
   }
 }
 
-class _Stepper extends StatelessWidget {
+/// Parses Western or Arabic-Indic digits ("١٠٠" or "100").
+int? parseDigits(String s) {
+  const ar = '٠١٢٣٤٥٦٧٨٩';
+  final b = StringBuffer();
+  for (final r in s.trim().runes) {
+    final c = String.fromCharCode(r);
+    final i = ar.indexOf(c);
+    b.write(i >= 0 ? '$i' : c);
+  }
+  return int.tryParse(b.toString());
+}
+
+/// Number box the user can tap and type into, with +/- buttons as quick adjusters.
+///  * valid numbers (min..max) are applied live while typing (typing "100" works digit by digit)
+///  * an out-of-range number is shown in red and is clamped when the field loses focus / on "done"
+class NumberStepper extends StatefulWidget {
   final String label;
   final int value, min, max;
   final ValueChanged<int> onChanged;
-  const _Stepper({required this.label, required this.value, required this.min, required this.max, required this.onChanged});
+  const NumberStepper({super.key, required this.label, required this.value, required this.min, required this.max, required this.onChanged});
 
   @override
-  Widget build(BuildContext context) => InputDecorator(
-        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0)),
-        child: Row(children: [
-          IconButton(icon: const Icon(Icons.remove_circle_outline), onPressed: value > min ? () => onChanged(value - 1) : null),
-          Expanded(child: Text(arabicNum(value), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-          IconButton(icon: const Icon(Icons.add_circle_outline), onPressed: value < max ? () => onChanged(value + 1) : null),
-        ]),
-      );
+  State<NumberStepper> createState() => _NumberStepperState();
+}
+
+class _NumberStepperState extends State<NumberStepper> {
+  late final TextEditingController _c = TextEditingController(text: arabicNum(widget.value));
+  late final FocusNode _f = FocusNode()..addListener(_onFocus);
+  bool _invalid = false;
+
+  @override
+  void didUpdateWidget(NumberStepper old) {
+    super.didUpdateWidget(old);
+    // external change (+/- buttons, clamping by the other field): reflect it unless it is what we just typed
+    if (old.value != widget.value && parseDigits(_c.text) != widget.value) {
+      _setText(widget.value);
+      _invalid = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _f.removeListener(_onFocus);
+    _f.dispose();
+    _c.dispose();
+    super.dispose();
+  }
+
+  void _setText(int v) {
+    final t = arabicNum(v);
+    _c.value = TextEditingValue(text: t, selection: TextSelection.collapsed(offset: t.length));
+  }
+
+  void _onFocus() {
+    if (_f.hasFocus) {
+      _c.selection = TextSelection(baseOffset: 0, extentOffset: _c.text.length); // type over the old number
+    } else {
+      _commit();
+    }
+  }
+
+  void _commit() {
+    final n = parseDigits(_c.text);
+    final v = (n ?? widget.value).clamp(widget.min, widget.max);
+    setState(() => _invalid = false);
+    _setText(v);
+    if (v != widget.value) widget.onChanged(v);
+  }
+
+  void _typed(String text) {
+    final n = parseDigits(text);
+    final ok = n != null && n >= widget.min && n <= widget.max;
+    setState(() => _invalid = text.isNotEmpty && !ok);
+    if (ok && n != widget.value) widget.onChanged(n);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final err = Theme.of(context).colorScheme.error;
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: widget.label,
+        border: const OutlineInputBorder(),
+        enabledBorder: _invalid ? OutlineInputBorder(borderSide: BorderSide(color: err, width: 1.6)) : null,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+      ),
+      child: Row(children: [
+        IconButton(
+          icon: const Icon(Icons.remove_circle_outline),
+          onPressed: widget.value > widget.min ? () => widget.onChanged(widget.value - 1) : null,
+        ),
+        Expanded(
+          child: TextField(
+            controller: _c,
+            focusNode: _f,
+            textAlign: TextAlign.center,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9٠-٩]')), LengthLimitingTextInputFormatter(4)],
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _invalid ? err : null),
+            decoration: const InputDecoration(isDense: true, border: InputBorder.none, contentPadding: EdgeInsets.symmetric(vertical: 14)),
+            onChanged: _typed,
+            onSubmitted: (_) => _commit(),
+            onTapOutside: (_) => _f.unfocus(),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.add_circle_outline),
+          onPressed: widget.value < widget.max ? () => widget.onChanged(widget.value + 1) : null,
+        ),
+      ]),
+    );
+  }
 }
 
 /// Compact control strip shown at the bottom of the reader while a memorization loop is active.
@@ -157,6 +287,7 @@ class MemorizeBar extends StatelessWidget {
         final first = QuranRepository.byGlobal(p.from).$2.i;
         final last = QuranRepository.byGlobal(p.to).$2.i;
         final rep = p.times == 0 ? '${arabicNum(ac.loop)} · ∞' : '${arabicNum(ac.loop)} من ${arabicNum(p.times)}';
+        final status = ac.inGap ? ' · وقفة، رددها الآن' : '';
         return Material(
           color: cs.secondaryContainer,
           child: SafeArea(
@@ -168,7 +299,7 @@ class MemorizeBar extends StatelessWidget {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                     Text('حفظ · ${s.name} ${arabicNum(first)}–${arabicNum(last)}',
                         style: TextStyle(fontWeight: FontWeight.bold, color: cs.onSecondaryContainer)),
-                    Text('الآية ${arabicNum(a.i)} · التكرار $rep',
+                    Text('الآية ${arabicNum(a.i)} · التكرار $rep$status',
                         style: TextStyle(fontSize: 12, color: cs.onSecondaryContainer.withOpacity(.8))),
                   ]),
                 ),

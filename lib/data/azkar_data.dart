@@ -1,14 +1,16 @@
-/// Azkar content: Morning, Evening, Sleep, After-prayer.
+/// Azkar content: Morning, Evening, Sleep, Wake-up, After-prayer, In-prayer.
 /// Sources follow Hisn al-Muslim / Sahih al-Kalim al-Tayyib. Every entry carries its own source.
 
-enum AzkarCategory { morning, evening, sleep, afterPrayer }
+enum AzkarCategory { morning, evening, sleep, wakeUp, afterPrayer, inPrayer }
 
 extension AzkarCategoryX on AzkarCategory {
   String get title => switch (this) {
         AzkarCategory.morning => 'الصباح',
         AzkarCategory.evening => 'المساء',
         AzkarCategory.sleep => 'النوم',
+        AzkarCategory.wakeUp => 'الاستيقاظ',
         AzkarCategory.afterPrayer => 'بعد الصلاة',
+        AzkarCategory.inPrayer => 'في الصلاة',
       };
 }
 
@@ -88,6 +90,20 @@ const _afiyah = Zekr(
   source: 'سنن أبي داود، سنن ابن ماجه',
 );
 
+
+const _radeetu = Zekr(
+  text: 'رَضِيتُ بِاللَّهِ رَبًّا، وَبِالْإِسْلَامِ دِينًا، وَبِمُحَمَّدٍ ﷺ نَبِيًّا',
+  source: 'سنن أبي داود، مسند أحمد',
+  count: 3,
+  note: 'من قالها حين يصبح وحين يمسي كان حقًّا على الله أن يرضيه',
+);
+
+const _adadKhalqih = Zekr(
+  text: 'سُبْحَانَ اللَّهِ وَبِحَمْدِهِ: عَدَدَ خَلْقِهِ، وَرِضَا نَفْسِهِ، وَزِنَةَ عَرْشِهِ، وَمِدَادَ كَلِمَاتِهِ',
+  source: _kMuslim,
+  count: 3,
+);
+
 // ───────────── Morning ─────────────
 final List<Zekr> morningAzkar = [
   _ayatAlKursi,
@@ -105,7 +121,9 @@ final List<Zekr> morningAzkar = [
   _sayyidIstighfar,
   _afiyah,
   _bismillahLaYadurr,
+  _radeetu,
   _tahlil,
+  _adadKhalqih,
   _subhanAllahBihamdih,
   _istighfar,
 ];
@@ -133,6 +151,7 @@ final List<Zekr> eveningAzkar = [
   ),
   _afiyah,
   _bismillahLaYadurr,
+  _radeetu,
   _tahlil,
   _subhanAllahBihamdih,
   _istighfar,
@@ -190,6 +209,10 @@ final List<Zekr> afterPrayerAzkar = [
     text: 'لَا إِلَهَ إِلَّا اللَّهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ، اللَّهُمَّ لَا مَانِعَ لِمَا أَعْطَيْتَ، وَلَا مُعْطِيَ لِمَا مَنَعْتَ، وَلَا يَنْفَعُ ذَا الْجَدِّ مِنْكَ الْجَدُّ',
     source: '$_kBukhari، $_kMuslim',
   ),
+  const Zekr(
+    text: 'اللَّهُمَّ لَا مَانِعَ لِمَا أَعْطَيْتَ، وَلَا مُعْطِيَ لِمَا مَنَعْتَ، وَلَا يَنْفَعُ ذَا الْجَدِّ مِنْكَ الْجَدُّ',
+    source: '$_kBukhari، $_kMuslim',
+  ),
   const Zekr(text: 'سُبْحَانَ اللَّهِ', source: _kMuslim, count: 33),
   const Zekr(text: 'الْحَمْدُ لِلَّهِ', source: _kMuslim, count: 33),
   const Zekr(text: 'اللَّهُ أَكْبَرُ', source: _kMuslim, count: 33),
@@ -214,9 +237,70 @@ final List<Zekr> afterPrayerAzkar = [
   ),
 ];
 
+// ───────────── Wake-up ─────────────
+final List<Zekr> wakeUpAzkar = [
+  const Zekr(
+    text: 'الْحَمْدُ لِلَّهِ الَّذِي أَحْيَانَا بَعْدَ مَا أَمَاتَنَا وَإِلَيْهِ النُّشُورُ',
+    source: _kBukhari,
+  ),
+];
+
+// ───────────── Inside the prayer ─────────────
+final List<Zekr> inPrayerAzkar = [
+  const Zekr(
+    text: 'سُبْحَانَكَ اللَّهُمَّ وَبِحَمْدِكَ، وَتَبَارَكَ اسْمُكَ، وَتَعَالَى جَدُّكَ، وَلَا إِلَهَ غَيْرُكَ',
+    source: 'سنن أبي داود، سنن الترمذي، سنن ابن ماجه',
+    note: 'دعاء الاستفتاح بعد تكبيرة الإحرام',
+  ),
+  const Zekr(
+    text: 'سُبْحَانَ رَبِّيَ الْعَظِيمِ',
+    source: 'صحيح مسلم، سنن أبي داود',
+    count: 3,
+    note: 'في الركوع',
+  ),
+  const Zekr(
+    text: 'سَمِعَ اللَّهُ لِمَنْ حَمِدَهُ',
+    source: '$_kBukhari، $_kMuslim',
+    note: 'عند الرفع من الركوع (للإمام والمنفرد)',
+  ),
+  const Zekr(
+    text: 'رَبَّنَا وَلَكَ الْحَمْدُ، حَمْدًا كَثِيرًا طَيِّبًا مُبَارَكًا فِيهِ',
+    source: _kBukhari,
+    note: 'بعد الاعتدال من الركوع',
+  ),
+  const Zekr(
+    text: 'سُبْحَانَ رَبِّيَ الْأَعْلَى',
+    source: 'صحيح مسلم، سنن الترمذي',
+    count: 3,
+    note: 'في السجود',
+  ),
+  const Zekr(
+    text: 'رَبِّ اغْفِرْ لِي، رَبِّ اغْفِرْ لِي',
+    source: 'سنن أبي داود، سنن ابن ماجه',
+    note: 'بين السجدتين',
+  ),
+  const Zekr(
+    text: 'التَّحِيَّاتُ لِلَّهِ وَالصَّلَوَاتُ وَالطَّيِّبَاتُ، السَّلَامُ عَلَيْكَ أَيُّهَا النَّبِيُّ وَرَحْمَةُ اللَّهِ وَبَرَكَاتُهُ، السَّلَامُ عَلَيْنَا وَعَلَى عِبَادِ اللَّهِ الصَّالِحِينَ، أَشْهَدُ أَنْ لَا إِلَهَ إِلَّا اللَّهُ، وَأَشْهَدُ أَنَّ مُحَمَّدًا عَبْدُهُ وَرَسُولُهُ',
+    source: '$_kBukhari، $_kMuslim',
+    note: 'التشهد',
+  ),
+  const Zekr(
+    text: 'اللَّهُمَّ صَلِّ عَلَى مُحَمَّدٍ وَعَلَى آلِ مُحَمَّدٍ، كَمَا صَلَّيْتَ عَلَى إِبْرَاهِيمَ وَعَلَى آلِ إِبْرَاهِيمَ، إِنَّكَ حَمِيدٌ مَجِيدٌ، اللَّهُمَّ بَارِكْ عَلَى مُحَمَّدٍ وَعَلَى آلِ مُحَمَّدٍ، كَمَا بَارَكْتَ عَلَى إِبْرَاهِيمَ وَعَلَى آلِ إِبْرَاهِيمَ، إِنَّكَ حَمِيدٌ مَجِيدٌ',
+    source: '$_kBukhari، $_kMuslim',
+    note: 'الصلاة الإبراهيمية في التشهد الأخير',
+  ),
+  const Zekr(
+    text: 'اللَّهُمَّ إِنِّي أَعُوذُ بِكَ مِنْ عَذَابِ جَهَنَّمَ، وَمِنْ عَذَابِ الْقَبْرِ، وَمِنْ فِتْنَةِ الْمَحْيَا وَالْمَمَاتِ، وَمِنْ شَرِّ فِتْنَةِ الْمَسِيحِ الدَّجَّالِ',
+    source: _kMuslim,
+    note: 'قبل السلام',
+  ),
+];
+
 List<Zekr> azkarFor(AzkarCategory c) => switch (c) {
       AzkarCategory.morning => morningAzkar,
       AzkarCategory.evening => eveningAzkar,
       AzkarCategory.sleep => sleepAzkar,
+      AzkarCategory.wakeUp => wakeUpAzkar,
       AzkarCategory.afterPrayer => afterPrayerAzkar,
+      AzkarCategory.inPrayer => inPrayerAzkar,
     };
