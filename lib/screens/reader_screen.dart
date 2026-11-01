@@ -2,22 +2,24 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:just_audio/just_audio.dart';
 import '../core/config.dart';
 import '../data/app_state.dart';
+import '../data/audio_controller.dart';
 import '../data/audio_store.dart';
+import '../data/reader_session.dart';
 import '../data/reciters.dart';
 import '../widgets/index_sheet.dart';
 import '../data/quran_repository.dart';
 import '../main.dart';
+import '../widgets/memorize_sheet.dart';
 import '../widgets/mushaf_page_view.dart';
-
-final _player = AudioPlayer();
 
 class ReaderScreen extends StatefulWidget {
   final int page;
   final int? focusG; // verse to highlight when opened from search / bookmarks
-  const ReaderScreen({super.key, required this.page, this.focusG});
+  /// Where reading progress is stored: SurahSession (default) or KhatmaSession.
+  final ReaderSession session;
+  const ReaderScreen({super.key, required this.page, this.focusG, this.session = const SurahSession()});
   @override
   State<ReaderScreen> createState() => _ReaderScreenState();
 }
@@ -27,76 +29,54 @@ class _ReaderScreenState extends State<ReaderScreen> {
   late int _page = widget.page;
   int? playingG;
   Timer? _dwell;
-  StreamSubscription<PlayerState>? _sub;
+  final ac = AudioController.I;
+  int? _lastG;
 
   @override
   void initState() {
     super.initState();
     WakelockPlus.enable(); // keep the screen on while reading
-    appState.setLastPage(_page);
+    widget.session.visit(_page);
     _startDwell();
-    _sub = _player.playerStateStream.listen((s) {
-      if (s.processingState == ProcessingState.completed && mounted && playingG != null) {
-        final next = playingG! + 1;
-        next <= QuranRepository.total ? _play(next) : setState(() => playingG = null);
-      }
-    });
+    ac.addListener(_onAudio);
   }
 
   @override
   void dispose() {
-    WakelockPlus.disable(); // let the screen sleep normally again
+    WakelockPlus.disable();
+    ac.removeListener(_onAudio);
+    ac.stop();
     _dwell?.cancel();
-    _sub?.cancel();
-    _player.stop();
     _pc.dispose();
-    WidgetsBinding.instance.addPostFrameCallback((_) => appState.refresh());
+    WidgetsBinding.instance.addPostFrameCallback((_) => widget.session.exit());
     super.dispose();
+  }
+
+  /// Follows the audio engine: highlight the verse, turn the page, show errors once.
+  void _onAudio() {
+    if (!mounted) return;
+    final g = ac.currentG;
+    if (g != _lastG) {
+      _lastG = g;
+      if (g != null) {
+        final pg = QuranRepository.ayahPage[g]!;
+        if (pg != _page && _pc.hasClients) {
+          _pc.animateToPage(pg - 1, duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
+        }
+      }
+    }
+    if (g != playingG) setState(() => playingG = g);
+    final err = ac.error;
+    if (err != null) {
+      ac.error = null;
+      _toast(err);
+    }
   }
 
   void _startDwell() {
     _dwell?.cancel();
     final p = _page;
-    _dwell = Timer(const Duration(seconds: 4), () => appState.markPageRead(p));
-  }
-
-  Future<void> _play(int g) async {
-    setState(() => playingG = g);
-    final pg = QuranRepository.ayahPage[g]!;
-    if (pg != _page && _pc.hasClients) {
-      _pc.animateToPage(pg - 1, duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
-    }
-    try {
-      await _load(Reciters.byId(appState.reciter, appState.reciterName), g);
-      unawaited(_player.play());
-    } catch (_) {
-      if (mounted) {
-        setState(() => playingG = null);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر تشغيل الصوت، تحقق من الاتصال')));
-      }
-    }
-  }
-
-  /// Plays the downloaded file when present, otherwise streams (trying fallback bitrates).
-  Future<void> _load(Reciter r, int g) async {
-    final st = AudioStore.I;
-    if (st.ready && st.has(r.id, g)) {
-      final f = st.fileFor(r.id, g);
-      if (await f.exists()) {
-        await _player.setFilePath(f.path);
-        return;
-      }
-    }
-    Object? last;
-    for (final u in r.urls(g).take(3)) {
-      try {
-        await _player.setUrl(u);
-        return;
-      } catch (e) {
-        last = e;
-      }
-    }
-    throw last ?? StateError('no audio url');
+    _dwell = Timer(const Duration(seconds: 4), () => widget.session.read(p));
   }
 
   void _openIndex() => showIndexSheet(context, (page) => _pc.jumpToPage(page - 1));
@@ -119,7 +99,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  void _stop() { _player.stop(); setState(() => playingG = null); }
+  void _openMemorize({int? surah, int? ayah}) {
+    final pg = QuranRepository.pages[_page - 1];
+    final first = QuranRepository.byGlobal(pg.firstG);
+    showMemorizeSheet(context, surah: surah ?? first.$1.n, fromAyah: ayah ?? first.$2.i);
+  }
 
   void _toast(String msg) {
     if (!mounted) return;
@@ -179,7 +163,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     style: const TextStyle(fontFamily: 'Amiri', fontWeight: FontWeight.bold, fontSize: 18)),
                 const SizedBox(height: 12),
                 Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                  _Act(icon: Icons.play_arrow, label: 'تلاوة', onTap: () { Navigator.pop(sheetCtx); _play(g); }),
+                  _Act(icon: Icons.play_arrow, label: 'تلاوة', onTap: () { Navigator.pop(sheetCtx); ac.playVerse(g); }),
+                  _Act(icon: Icons.repeat, label: 'تكرار', onTap: () { Navigator.pop(sheetCtx); _openMemorize(surah: s.n, ayah: a.i); }),
                   _Act(icon: Icons.copy, label: 'نسخ', onTap: () {
                     Clipboard.setData(ClipboardData(text: '${a.text} ﴿${arabicNum(a.i)}﴾\n[${s.name}]'));
                     Navigator.pop(sheetCtx);
@@ -277,11 +262,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
         textDirection: TextDirection.rtl,
         child: Scaffold(
           appBar: AppBar(
-            title: Text('صفحة ${arabicNum(_page)}', style: const TextStyle(fontSize: 17)),
+            title: Text('${widget.session.titlePrefix}صفحة ${arabicNum(_page)}', style: const TextStyle(fontSize: 17)),
             centerTitle: true,
             actions: [
               IconButton(icon: const Icon(Icons.menu), tooltip: 'الفهرس', onPressed: _openIndex),
               IconButton(icon: const Icon(Icons.pin_outlined), tooltip: 'انتقال', onPressed: _jumpDialog),
+              IconButton(icon: const Icon(Icons.repeat_on), tooltip: 'تكرار للحفظ', onPressed: _openMemorize),
               ListenableBuilder(
                 listenable: AudioStore.I,
                 builder: (_, __) => AudioStore.I.isBusy('pg$_page|${appState.reciter}')
@@ -293,28 +279,50 @@ class _ReaderScreenState extends State<ReaderScreen> {
               IconButton(
                 icon: Icon(playingG == null ? Icons.headphones : Icons.stop_circle_outlined),
                 tooltip: 'استماع',
-                onPressed: () => playingG == null ? _play(QuranRepository.pages[_page - 1].firstG) : _stop(),
+                onPressed: () => playingG == null ? ac.playVerse(QuranRepository.pages[_page - 1].firstG) : ac.stop(),
               ),
             ],
           ),
-          body: ListenableBuilder(
-            listenable: appState,
-            builder: (_, __) => PageView.builder(
-              controller: _pc,
-              scrollDirection: appState.readVertical ? Axis.vertical : Axis.horizontal,
-              itemCount: QuranRepository.pageCount,
-              onPageChanged: (i) {
-                setState(() => _page = i + 1);
-                appState.setLastPage(_page);
-                _startDwell();
-              },
-              itemBuilder: (_, i) => MushafPageView(
-                page: QuranRepository.pages[i],
-                playingG: playingG ?? widget.focusG,
-                onTapAyah: _openAyah,
+          body: Column(children: [
+            Expanded(
+              // while the memorize bar is visible it already sits above the system nav area,
+              // so the page must not reserve that inset a second time
+              child: ListenableBuilder(
+                listenable: ac,
+                builder: (ctx, child) {
+                  final mq = MediaQuery.of(ctx);
+                  if (!ac.repeating) return child!;
+                  return MediaQuery(
+                    data: mq.copyWith(
+                      padding: mq.padding.copyWith(bottom: 0),
+                      viewPadding: mq.viewPadding.copyWith(bottom: 0),
+                      systemGestureInsets: mq.systemGestureInsets.copyWith(bottom: 0),
+                    ),
+                    child: child!,
+                  );
+                },
+                child: ListenableBuilder(
+                  listenable: appState,
+                  builder: (_, __) => PageView.builder(
+                    controller: _pc,
+                    scrollDirection: appState.readVertical ? Axis.vertical : Axis.horizontal,
+                    itemCount: QuranRepository.pageCount,
+                    onPageChanged: (i) {
+                      setState(() => _page = i + 1);
+                      widget.session.visit(_page);
+                      _startDwell();
+                    },
+                    itemBuilder: (_, i) => MushafPageView(
+                      page: QuranRepository.pages[i],
+                      playingG: playingG ?? widget.focusG,
+                      onTapAyah: _openAyah,
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
+            const MemorizeBar(),
+          ]),
         ),
       );
 }

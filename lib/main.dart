@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'core/config.dart';
 import 'data/app_state.dart';
 import 'data/audio_store.dart';
+import 'data/khatma_state.dart';
 import 'data/quran_repository.dart';
 import 'screens/splash_screen.dart';
 
@@ -10,6 +11,7 @@ final appState = AppState();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await appState.init();
+  await khatmaState.init(); // after appState: migrates the old khatma progress once
   try {
     await AudioStore.I.init();
   } catch (_) {}

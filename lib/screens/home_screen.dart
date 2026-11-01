@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../data/quran_repository.dart';
 import '../main.dart';
 import '../widgets/logo_mark.dart';
+import 'azkar_screen.dart';
 import 'bookmarks_screen.dart';
-import 'khatmah_screen.dart';
+import 'khatma_tab.dart';
 import 'reader_screen.dart';
 import 'search_screen.dart';
 import 'settings_screen.dart';
 
-void openPage(BuildContext c, int page, {int? focusG}) =>
-    Navigator.push(c, MaterialPageRoute(builder: (_) => ReaderScreen(page: page, focusG: focusG)));
+/// Opens the Mushaf in normal (Surah / Search / Bookmarks) mode on the ROOT navigator,
+/// so the reader is a full-screen route independent of every tab's own history.
+void openPage(BuildContext c, int page, {int? focusG}) => Navigator.of(c, rootNavigator: true)
+    .push(MaterialPageRoute(builder: (_) => ReaderScreen(page: page, focusG: focusG)));
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,29 +23,55 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int tab = 0;
+  // One Navigator per tab: each tab keeps its own back-stack and scroll position,
+  // so nothing a tab does can leak into another one (Khatma <-> Surah in particular).
+  final _navKeys = List.generate(5, (_) => GlobalKey<NavigatorState>());
+  late final List<Widget> _tabs = [
+    _tabNav(0, const _SurahList()),
+    _tabNav(1, const SearchScreen()),
+    _tabNav(2, const BookmarksScreen()),
+    _tabNav(3, const KhatmaTab()),
+    _tabNav(4, const SettingsScreen()),
+  ];
+
+  Widget _tabNav(int i, Widget root) => Navigator(
+        key: _navKeys[i],
+        onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => root),
+      );
+
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      const _SurahList(),
-      const SearchScreen(),
-      const BookmarksScreen(),
-      const KhatmahScreen(),
-      const SettingsScreen(),
-    ];
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: Scaffold(
-        body: SafeArea(child: pages[tab]),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: tab,
-          onDestinationSelected: (i) => setState(() => tab = i),
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: 'السور'),
-            NavigationDestination(icon: Icon(Icons.search), label: 'البحث'),
-            NavigationDestination(icon: Icon(Icons.bookmark_border), selectedIcon: Icon(Icons.bookmark), label: 'المحفوظات'),
-            NavigationDestination(icon: Icon(Icons.flag_outlined), selectedIcon: Icon(Icons.flag), label: 'الختمة'),
-            NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'الإعدادات'),
-          ],
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          final nav = _navKeys[tab].currentState;
+          if (nav != null && nav.canPop()) {
+            nav.pop();
+          } else if (tab != 0) {
+            setState(() => tab = 0);
+          } else {
+            SystemNavigator.pop();
+          }
+        },
+        child: Scaffold(
+          body: SafeArea(child: IndexedStack(index: tab, children: _tabs)),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: tab,
+            onDestinationSelected: (i) {
+              if (i == tab) _navKeys[i].currentState?.popUntil((r) => r.isFirst);
+              setState(() => tab = i);
+            },
+            destinations: const [
+              NavigationDestination(icon: Icon(Icons.menu_book_outlined), selectedIcon: Icon(Icons.menu_book), label: 'السور'),
+              NavigationDestination(icon: Icon(Icons.search), label: 'البحث'),
+              NavigationDestination(icon: Icon(Icons.bookmark_border), selectedIcon: Icon(Icons.bookmark), label: 'المحفوظات'),
+              NavigationDestination(icon: Icon(Icons.flag_outlined), selectedIcon: Icon(Icons.flag), label: 'الختمة'),
+              NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'الإعدادات'),
+            ],
+          ),
         ),
       ),
     );
@@ -113,6 +143,12 @@ class _SurahList extends StatelessWidget {
             subtitle: Text('صفحة ${arabicNum(appState.lastPage)}'),
             onTap: () => openPage(context, appState.lastPage),
           ),
+        ListTile(
+          leading: const Icon(Icons.wb_twilight),
+          title: const Text('الأذكار'),
+          subtitle: const Text('الصباح · المساء · النوم · بعد الصلاة'),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AzkarScreen())),
+        ),
         for (final j in juzs) ...[
           _juzHeader(j),
           for (final s in byJuz[j]!) _surahTile(context, s),
